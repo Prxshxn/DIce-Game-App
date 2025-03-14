@@ -3,19 +3,22 @@ package com.example.dicegameapp
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.dicegameapp.ui.theme.DiceGameAppTheme
+import kotlin.random.Random
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -33,12 +36,17 @@ class MainActivity : ComponentActivity() {
                     ) {
                         composable("home") {
                             HomeScreen(
-                                onNewGameClicked = { /* Handle New Game button click */ },
+                                onNewGameClicked = { navController.navigate("game") },
                                 onAboutClicked = { navController.navigate("about") }
                             )
                         }
                         composable("about") {
                             AboutScreen(
+                                onBackClicked = { navController.popBackStack() }
+                            )
+                        }
+                        composable("game") {
+                            GameScreen(
                                 onBackClicked = { navController.popBackStack() }
                             )
                         }
@@ -114,4 +122,101 @@ fun AboutScreen(
             Text("Back to Home")
         }
     }
+}
+
+@Composable
+fun GameScreen(
+    onBackClicked: () -> Unit
+) {
+    var humanDice by remember { mutableStateOf(List(5) { 1 }) } // Human player's dice
+    var computerDice by remember { mutableStateOf(List(5) { 1 }) } // Computer's dice
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // Display human player's dice
+        Text(text = "Your Dice", style = MaterialTheme.typography.headlineSmall)
+        DiceRow(diceValues = humanDice)
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Display computer's dice
+        Text(text = "Computer's Dice", style = MaterialTheme.typography.headlineSmall)
+        DiceRow(diceValues = computerDice)
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        // Throw Button
+        Button(
+            onClick = {
+                humanDice = rollDice() // Roll dice for the human player
+                computerDice = rollDice() // Roll dice for the computer
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp)
+        ) {
+            Text(text = "Throw")
+        }
+
+        // Score Button
+        Button(
+            onClick = {
+                // Handle scoring logic here
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp)
+        ) {
+            Text(text = "Score")
+        }
+
+        // Back Button
+        Button(
+            onClick = onBackClicked,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp)
+        ) {
+            Text(text = "Back to Home")
+        }
+    }
+}
+
+@Composable
+fun DiceRow(diceValues: List<Int>) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceEvenly
+    ) {
+        diceValues.forEach { value ->
+            DiceImage(value = value)
+        }
+    }
+}
+
+@Composable
+fun DiceImage(value: Int) {
+    val imageRes = when (value) {
+        1 -> R.drawable.dice_1
+        2 -> R.drawable.dice_2
+        3 -> R.drawable.dice_3
+        4 -> R.drawable.dice_4
+        5 -> R.drawable.dice_5
+        6 -> R.drawable.dice_6
+        else -> throw IllegalArgumentException("Invalid dice value")
+    }
+    Image(
+        painter = painterResource(id = imageRes),
+        contentDescription = "Dice $value",
+        modifier = Modifier.size(64.dp)
+    )
+}
+
+fun rollDice(): List<Int> {
+    return List(5) { Random.nextInt(1, 7) } // Random values between 1 and 6
 }
