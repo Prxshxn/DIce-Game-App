@@ -1,5 +1,32 @@
 package com.example.dicegameapp
 
+/**
+ * Dice Game App
+ *
+ * Features implemented:
+ * 
+ * 1. Configurable Target Score:
+ *    - Logic: Players can set their own target score (min 10, default 101) before starting a game
+ *    - Advantages:
+ *      - Allows for shorter or longer games based on player preference
+ *      - Increases replayability by varying game length
+ *      - Lets players adjust difficulty by setting lower/higher targets
+ *      - Provides flexibility for different play scenarios (quick games vs extended sessions)
+ *
+ * 2. Win Tracking System:
+ *    - Logic: Tracks total wins for both human and computer players during app runtime
+ *    - Display format: "H:X/C:Y" where X is human wins and Y is computer wins
+ *    - Advantages:
+ *      - Provides session-based statistics to track performance
+ *      - Creates a sense of competition and achievement
+ *      - Allows players to see their win/loss record without permanent storage
+ *      - Enhances the game experience by adding a competitive element
+ *      - Resets on app restart for fresh start each session
+ *
+ * Both features enhance the user experience by adding customization and competitive elements
+ * while maintaining the core dice game mechanics.
+ */
+
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
