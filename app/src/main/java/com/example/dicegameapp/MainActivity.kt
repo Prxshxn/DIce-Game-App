@@ -4,7 +4,7 @@ package com.example.dicegameapp
  * Dice Game App
  *
  * Features implemented:
- * 
+ *
  * 1. Configurable Target Score:
  *    - Logic: Players can set their own target score (min 10, default 101) before starting a game
  *    - Advantages:
@@ -22,6 +22,15 @@ package com.example.dicegameapp
  *      - Allows players to see their win/loss record without permanent storage
  *      - Enhances the game experience by adding a competitive element
  *      - Resets on app restart for fresh start each session
+ *
+ * 3. Tie-Breaking Mechanism:
+ *    - Logic: If both players reach the target score in the same turn, they enter a tie-breaking phase
+ *    - In tie-breaking mode, each player gets one roll per turn (no rerolls allowed)
+ *    - This continues until one player scores higher in a single tie-breaking turn
+ *    - Advantages:
+ *      - Ensures a definitive winner even in close games
+ *      - Creates additional tension and excitement for close matches
+ *      - Follows dice game conventions for resolving ties
  *
  * Both features enhance the user experience by adding customization and competitive elements
  * while maintaining the core dice game mechanics.
@@ -43,6 +52,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -63,10 +73,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             DiceGameAppTheme {
-                // Remember wins across navigation
-                var humanWinsTotal by remember { mutableStateOf(0) }
-                var computerWinsTotal by remember { mutableStateOf(0) }
-                var targetScore by remember { mutableStateOf(101) }
+                // Remember wins across navigation and device rotation
+                var humanWinsTotal by rememberSaveable { mutableStateOf(0) }
+                var computerWinsTotal by rememberSaveable { mutableStateOf(0) }
+                var targetScore by rememberSaveable { mutableStateOf(101) }
                 
                 Surface(
                     modifier = Modifier.fillMaxSize(),
@@ -114,7 +124,7 @@ fun HomeScreen(
     targetScore: Int,
     onTargetScoreChanged: (Int) -> Unit
 ) {
-    var targetScoreText by remember { mutableStateOf(targetScore.toString()) }
+    var targetScoreText by rememberSaveable { mutableStateOf(targetScore.toString()) }
     
     Column(
         modifier = Modifier
@@ -207,20 +217,25 @@ fun GameScreen(
     onComputerWin: () -> Unit,
     targetScore: Int
 ) {
-    var humanDice by remember { mutableStateOf(List(5) { 1 }) }
-    var computerDice by remember { mutableStateOf(List(5) { 1 }) }
-    var humanScore by remember { mutableStateOf(0) }
-    var computerScore by remember { mutableStateOf(0) }
-    var humanRollsRemaining by remember { mutableStateOf(3) }
-    var computerRollsRemaining by remember { mutableStateOf(3) }
-    var selectedDice by remember { mutableStateOf(List(5) { false }) }
-    var computerSelectedDice by remember { mutableStateOf(List(5) { false }) }
-    var firstRoll by remember { mutableStateOf(true) }
-    var gameOver by remember { mutableStateOf(false) }
-    var humanWins by remember { mutableStateOf(false) }
+    // Use rememberSaveable to preserve state during configuration changes
+    var humanDice by rememberSaveable { mutableStateOf(List(5) { 1 }) }
+    var computerDice by rememberSaveable { mutableStateOf(List(5) { 1 }) }
+    var humanScore by rememberSaveable { mutableStateOf(0) }
+    var computerScore by rememberSaveable { mutableStateOf(0) }
+    var humanRollsRemaining by rememberSaveable { mutableStateOf(3) }
+    var computerRollsRemaining by rememberSaveable { mutableStateOf(3) }
+    var selectedDice by rememberSaveable { mutableStateOf(List(5) { false }) }
+    var computerSelectedDice by rememberSaveable { mutableStateOf(List(5) { false }) }
+    var firstRoll by rememberSaveable { mutableStateOf(true) }
+    var gameOver by rememberSaveable { mutableStateOf(false) }
+    var humanWins by rememberSaveable { mutableStateOf(false) }
+    var tieBreakMode by rememberSaveable { mutableStateOf(false) }
+    var tieBreakHumanScore by rememberSaveable { mutableStateOf(0) }
+    var tieBreakComputerScore by rememberSaveable { mutableStateOf(0) }
+    var tieBreakRound by rememberSaveable { mutableStateOf(0) }
 
     // Reset selectedDice when starting a new round
-    if (humanRollsRemaining == 3) {
+    if (humanRollsRemaining == 3 && !tieBreakMode) {
         selectedDice = List(5) { false }
         computerSelectedDice = List(5) { false }
         firstRoll = true
@@ -230,7 +245,14 @@ fun GameScreen(
     fun computerTurn() {
         if (computerRollsRemaining <= 0) return
         
-        // First roll always happens
+        // In tie-break mode, simply roll all dice (no rerolls allowed)
+        if (tieBreakMode) {
+            computerDice = rollDice()
+            computerRollsRemaining = 0
+            return
+        }
+        
+        // Normal game logic
         if (computerRollsRemaining == 3) {
             computerDice = rollDice()
             computerRollsRemaining--
@@ -264,11 +286,51 @@ fun GameScreen(
     
     // Function to check for a winner
     fun checkForWinner() {
-        if (humanScore >= targetScore) {
+        val humanReachedTarget = humanScore >= targetScore
+        val computerReachedTarget = computerScore >= targetScore
+        
+        // Check for tie condition
+        if (humanReachedTarget && computerReachedTarget) {
+            // Enter tie-break mode if not already in it
+            if (!tieBreakMode) {
+                tieBreakMode = true
+                tieBreakRound = 0
+                tieBreakHumanScore = 0
+                tieBreakComputerScore = 0
+                // Reset for tie-break round
+                humanRollsRemaining = 1 // Only one roll per tie-break turn
+                computerRollsRemaining = 1
+                firstRoll = true
+            } else {
+                // We're already in tie-break mode, compare the tie-break scores
+                if (tieBreakHumanScore > tieBreakComputerScore) {
+                    gameOver = true
+                    humanWins = true
+                    onHumanWin()
+                    tieBreakMode = false
+                } else if (tieBreakComputerScore > tieBreakHumanScore) {
+                    gameOver = true
+                    humanWins = false
+                    onComputerWin()
+                    tieBreakMode = false
+                } else {
+                    // Still tied, continue tie-break
+                    tieBreakRound++
+                    // Reset for next tie-break round
+                    humanRollsRemaining = 1
+                    computerRollsRemaining = 1
+                    tieBreakHumanScore = 0
+                    tieBreakComputerScore = 0
+                    firstRoll = true
+                }
+            }
+        } 
+        // Normal win conditions if not tied
+        else if (humanReachedTarget) {
             gameOver = true
             humanWins = true
             onHumanWin()
-        } else if (computerScore >= targetScore) {
+        } else if (computerReachedTarget) {
             gameOver = true
             humanWins = false
             onComputerWin()
@@ -288,6 +350,10 @@ fun GameScreen(
                 firstRoll = true
                 selectedDice = List(5) { false }
                 computerSelectedDice = List(5) { false }
+                tieBreakMode = false
+                tieBreakHumanScore = 0
+                tieBreakComputerScore = 0
+                tieBreakRound = 0
             },
             title = { 
                 Text(
@@ -301,7 +367,8 @@ fun GameScreen(
             text = { 
                 Text(
                     text = "Final score: You $humanScore - Computer $computerScore\n" +
-                           "Target to reach: $targetScore",
+                           "Target to reach: $targetScore\n" +
+                           if (tieBreakRound > 0) "Tie-break rounds played: $tieBreakRound" else "",
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
                 ) 
@@ -318,6 +385,10 @@ fun GameScreen(
                         firstRoll = true
                         selectedDice = List(5) { false }
                         computerSelectedDice = List(5) { false }
+                        tieBreakMode = false
+                        tieBreakHumanScore = 0
+                        tieBreakComputerScore = 0
+                        tieBreakRound = 0
                     }
                 ) {
                     Text("Play Again")
@@ -367,11 +438,28 @@ fun GameScreen(
             )
         }
 
+        // Tie-break indicator
+        if (tieBreakMode) {
+            Text(
+                text = "TIE-BREAK MODE (Round ${tieBreakRound + 1})",
+                color = Color.Red,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            Text(
+                text = "Tie-break score: You $tieBreakHumanScore | Computer $tieBreakComputerScore",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+        }
+
         // Human player's dice
         Text(text = "Your Dice", style = MaterialTheme.typography.headlineSmall)
 
         // Only allow dice selection after first roll and before all rolls are used
-        val canSelectDice = !firstRoll && humanRollsRemaining > 0
+        // But disable selection in tie-break mode
+        val canSelectDice = !tieBreakMode && !firstRoll && humanRollsRemaining > 0
 
         if (canSelectDice) {
             Text(
@@ -405,38 +493,63 @@ fun GameScreen(
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // Throw Button (disabled after 3 rolls)
+        // Throw Button (disabled after rolls are used up)
         Button(
             onClick = {
                 if (humanRollsRemaining > 0) {
-                    if (firstRoll) {
-                        // First roll: roll all dice
+                    if (tieBreakMode) {
+                        // In tie-break mode: just roll all dice, no keeping dice
                         humanDice = rollDice()
-                        computerTurn() // First computer roll
-                        firstRoll = false
-                    } else {
-                        // Subsequent rolls: only reroll unselected dice
-                        humanDice = humanDice.mapIndexed { index, value ->
-                            if (selectedDice[index]) value else Random.nextInt(1, 7)
+                        computerTurn() // Computer's tie-break roll
+                        
+                        // In tie-break mode, update tie-break scores after each throw
+                        tieBreakHumanScore = humanDice.sum()
+                        tieBreakComputerScore = computerDice.sum()
+                        
+                        // Use up all rolls in tie-break
+                        humanRollsRemaining = 0
+                        computerRollsRemaining = 0
+                        
+                        // Check if tie is broken
+                        checkForWinner()
+                        
+                        // Reset for next tie-break round if still tied
+                        if (tieBreakMode && !gameOver) {
+                            humanRollsRemaining = 1
+                            computerRollsRemaining = 1
                         }
-                        computerTurn() // Computer's turn with random strategy
-                    }
-                    humanRollsRemaining--
-                }
-
-                if (humanRollsRemaining == 0) {
-                    // Round complete
-                    useAllComputerRolls() // Use any remaining computer rolls
-                    humanScore += humanDice.sum()
-                    computerScore += computerDice.sum()
-                    checkForWinner() // Check if someone won
-                    if (!gameOver) {
-                        // Only reset for next turn if game is not over
-                        humanRollsRemaining = 3
-                        computerRollsRemaining = 3
-                        firstRoll = true
-                        selectedDice = List(5) { false }
-                        computerSelectedDice = List(5) { false }
+                    } else {
+                        // Normal game mode
+                        if (firstRoll) {
+                            // First roll: roll all dice
+                            humanDice = rollDice()
+                            computerTurn() // First computer roll
+                            firstRoll = false
+                        } else {
+                            // Subsequent rolls: only reroll unselected dice
+                            humanDice = humanDice.mapIndexed { index, value ->
+                                if (selectedDice[index]) value else Random.nextInt(1, 7)
+                            }
+                            computerTurn() // Computer's turn with random strategy
+                        }
+                        humanRollsRemaining--
+                        
+                        if (humanRollsRemaining == 0) {
+                            // Round complete
+                            useAllComputerRolls() // Use any remaining computer rolls
+                            humanScore += humanDice.sum()
+                            computerScore += computerDice.sum()
+                            checkForWinner() // Check if someone won
+                            
+                            if (!gameOver && !tieBreakMode) {
+                                // Only reset for next turn if game is not over and not in tie-break
+                                humanRollsRemaining = 3
+                                computerRollsRemaining = 3
+                                firstRoll = true
+                                selectedDice = List(5) { false }
+                                computerSelectedDice = List(5) { false }
+                            }
+                        }
                     }
                 }
             },
@@ -445,26 +558,37 @@ fun GameScreen(
                 .fillMaxWidth()
                 .padding(vertical = 8.dp)
         ) {
-            Text(text = if (firstRoll) "Throw (First Roll)" else "Throw (${humanRollsRemaining} rolls left)")
+            Text(
+                text = if (tieBreakMode) {
+                    "Throw (Tie-Break)"
+                } else if (firstRoll) {
+                    "Throw (First Roll)"
+                } else {
+                    "Throw (${humanRollsRemaining} rolls left)"
+                }
+            )
         }
 
-        // Score Button
+        // Score Button (disabled in tie-break mode)
         Button(
             onClick = {
-                useAllComputerRolls() // Use all remaining computer rolls with random strategy
-                humanScore += humanDice.sum()
-                computerScore += computerDice.sum()
-                checkForWinner() // Check if someone won
-                if (!gameOver) {
-                    // Only reset for next turn if game is not over
-                    humanRollsRemaining = 3
-                    computerRollsRemaining = 3
-                    firstRoll = true
-                    selectedDice = List(5) { false }
-                    computerSelectedDice = List(5) { false }
+                if (!tieBreakMode) {
+                    useAllComputerRolls() // Use all remaining computer rolls with random strategy
+                    humanScore += humanDice.sum()
+                    computerScore += computerDice.sum()
+                    checkForWinner() // Check if someone won
+                    
+                    if (!gameOver && !tieBreakMode) {
+                        // Only reset for next turn if game is not over and not in tie-break
+                        humanRollsRemaining = 3
+                        computerRollsRemaining = 3
+                        firstRoll = true
+                        selectedDice = List(5) { false }
+                        computerSelectedDice = List(5) { false }
+                    }
                 }
             },
-            enabled = !gameOver,
+            enabled = !gameOver && !tieBreakMode && humanRollsRemaining > 0,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 8.dp)
